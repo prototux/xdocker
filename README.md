@@ -27,8 +27,8 @@ Initially there was 2 systems, one for desktop applications, and one for hardwar
 
 The options are bash scripts (so it is possible to, say, run a dmenu asking for variations, and set options conditionally) that set several variables:
 
-* `OPTS_X11` to pass the host Xorg to the container
-* `OPTS_SOUND` to pass pulseaudio to the container
+* `OPTS_XORG` to pass the host Xorg to the container
+* `OPTS_PULSE` to pass pulseaudio to the container
 * `OPTS_DL` to pass `$HOME/Downloads` to the container
 * `OPTS_CONFIG` to pass `$XDG_CONFIG_HOME` (.config) to the container
 * `OPTS_DATA` to pass `$XDG_DATA_HOME` (.local) to the container

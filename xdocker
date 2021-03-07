@@ -2,11 +2,13 @@
 
 ## Parameters
 if [[ -n "$1" ]]; then
-	APP="xdocker-$1"
+	APP="$1"
+	DOCKER_IMAGE="xdocker-$1"
 	TTYARG="-t"
 	shift
 else
 	APP="xbase"
+	DOCKER_IMAGE="xbase"
 	TTYARG="-it"
 fi
 
@@ -15,9 +17,10 @@ OPTS="--rm --network=host $TTYARG"
 GPGAGENT=$(gpgconf --list-dirs | grep agent-socket | cut -d':' -f2)
 
 ## Check if the app config file exists, and load it if it does
-if [[ "$APP" != "xbase" && -f $XDG_CONFIG_HOME/xdocker/$APP ]]; then
-	echo "WARN: no config file for $APP"
+if [[ -f $XDG_CONFIG_HOME/xdocker/$APP ]]; then
 	source $XDG_CONFIG_HOME/xdocker/$APP
+elif [[ "$APP" != "xbase" ]]; then
+	echo "WARN: no config file for $APP"
 fi
 
 ## Optionnal flags
@@ -31,6 +34,8 @@ fi
 [[ $OPTS_GPG == "true" ]] && OPTS+=" -v $GPGAGENT:$HOME/.gnupg/S.gpg-agent -v $HOME/.gnupg:$HOME/.gnupg"
 [[ $OPTS_PASS == "true" ]] && OPTS+=" -v $HOME/.password-store:$HOME/.password-store"
 
+echo $OPTS
+
 ## Check if the xdocker RC file exists, and add custom options if it does
 if [[ -f $XDG_CONFIG_HOME/xdocker/xdocker.rc ]]; then
 	while read custopt; do
@@ -41,4 +46,4 @@ if [[ -f $XDG_CONFIG_HOME/xdocker/xdocker.rc ]]; then
 fi
 
 ## Run docker
-docker run $OPTS $DOCKER_ARGS $APP $APP_CMD
+docker run $OPTS $DOCKER_ARGS $DOCKER_IMAGE $APP_CMD
