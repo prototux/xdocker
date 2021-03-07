@@ -1,0 +1,4 @@
+OPTS_DL=true
+OPTS_DATA=true
+OPTS_CONFIG=true
+DOCKER_ARGS="-v $HOME/3DModels:$HOME/3DModels"

@@ -1,0 +1,1 @@
+OPTS_CUSTOMDIR=-v $HOME/Customdir:$HOME/Customdir

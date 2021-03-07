@@ -1,0 +1,5 @@
+FROM xbase
+
+RUN sudo pacman -S --noconfirm cura noto-fonts
+
+CMD ["/usr/bin/cura"]
