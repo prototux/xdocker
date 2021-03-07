@@ -20,13 +20,13 @@ if [[ -f $XDG_CONFIG_HOME/xdocker/$APP ]]; then
 fi
 
 ## Optionnal flags
-[[ $OTPS_X11 == "true" ]] && OPTS+=" -v /tmp/.X11-unix:/tmp/.X11-unix -v $HOME/.Xauthority:$HOME/.Xauthority -e DISPLAY=$DISPLAY"
+[[ $OPTS_X11 == "true" ]] && OPTS+=" -v /tmp/.X11-unix:/tmp/.X11-unix -v $HOME/.Xauthority:$HOME/.Xauthority -e DISPLAY=$DISPLAY"
 [[ $OPTS_SOUND == "true" ]] && OPTS+=" -v $XDG_RUNTIME_DIR/pulse:/tmp/pulse"
 [[ $OPTS_DL == "true" ]] && OPTS+=" -v $HOME/Downloads:$HOME/Downloads"
 [[ $OPTS_CONFIG == "true" ]] && OPTS+=" -v $XDG_CONFIG_HOME:$XDG_CONFIG_HOME"
 [[ $OPTS_DATA == "true" ]] && OPTS+=" -v $XDG_DATA_HOME:$XDG_DATA_HOME"
 [[ $OPTS_DOCS == "true" ]] && OPTS+=" -v $HOME/Documents:$HOME/Documents"
-[[ $OPTS_MOUNTS == "true" ]] && OPTS+="-v /mnt:/mnt -v /media:/media"
+[[ $OPTS_MOUNTS == "true" ]] && OPTS+=" -v /mnt:/mnt -v /media:/media"
 [[ $OPTS_GPG == "true" ]] && OPTS+=" -v $GPGAGENT:$HOME/.gnupg/S.gpg-agent -v $HOME/.gnupg:$HOME/.gnupg"
 [[ $OPTS_PASS == "true" ]] && OPTS+=" -v $HOME/.password-store:$HOME/.password-store"
 
