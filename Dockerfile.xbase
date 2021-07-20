@@ -6,20 +6,20 @@ ARG PULSE_PKG="pulseaudio"
 ARG UTIL_PKG="sudo gnupg wget curl noto-fonts"
 
 # Define user
-ARG USER="prototux"
+ARG user="prototux"
 
 # Install base packages
 RUN pacman -Syu --noconfirm && pacman -S --noconfirm $X11_PKG $PULSE_PKG $UTIL_PKG
 
 # Create user and add to correct groups
-RUN groupadd -g 1000 $USER && useradd -u 1000 -g 1000 -G video,lp,audio,wheel -m $USER
+RUN groupadd -g 1000 $user && useradd -u 1000 -g 1000 -G video,lp,audio,wheel -m $user
 RUN echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/wheel
 
 # Add pulse-client to avoid creating the pulseaudio server
 COPY pulse-client.conf /etc/pulse/client.conf
 
 # Setup default running env (user/dir)
-USER $USER
-WORKDIR /home/$USER
+USER $user
+WORKDIR /home/$user
 
 CMD ["/bin/bash"]

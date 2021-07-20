@@ -16,7 +16,7 @@ Initially there was 2 systems, one for desktop applications, and one for hardwar
 ## Howto
 
 * Build the xbase image (and tag it as `xbase`)
-* * `docker build --no-cache -t xbase --build-arg USER=$USER -f ./Dockerfile.xbase .`
+* * `docker build --no-cache -t xbase --build-arg user=$USER -f ./Dockerfile.xbase .`
 * You can run it just by running xdocker (without any parameter)
 * Build any image you want based on the xbase image, with the tag as `xdocker-$appname`
 * Create a config file in `$XDG_CONFIG_HOME/xdocker/$appname` if you need options (see below)
