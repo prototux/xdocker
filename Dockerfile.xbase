@@ -1,9 +1,11 @@
 FROM archlinux:latest
 
 # Define base packages
-ARG X11_PKG="libx11 libxext libxmu libxrender libxt mesa"
+ARG X11_PKG="libx11 libxcb libxext libxmu libxrender libxkbcommon-x11 libxinerama libxt mesa fontconfig"
 ARG PULSE_PKG="pulseaudio"
-ARG UTIL_PKG="sudo gnupg wget"
+ARG UTIL_PKG="sudo gnupg wget curl noto-fonts"
+
+# Define user
 ENV USER="prototux"
 
 # Install base packages

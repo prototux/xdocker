@@ -13,7 +13,7 @@ else
 fi
 
 ## Base vars
-OPTS="--rm --network=host $TTYARG"
+OPTS="--rm $TTYARG"
 GPGAGENT=$(gpgconf --list-dirs | grep agent-socket | cut -d':' -f2)
 
 ## Check if the app config file exists, and load it if it does
@@ -33,8 +33,7 @@ fi
 [[ $OPTS_MOUNTS == "true" ]] && OPTS+=" -v /mnt:/mnt -v /media:/media"
 [[ $OPTS_GPG == "true" ]] && OPTS+=" -v $GPGAGENT:$HOME/.gnupg/S.gpg-agent -v $HOME/.gnupg:$HOME/.gnupg"
 [[ $OPTS_PASS == "true" ]] && OPTS+=" -v $HOME/.password-store:$HOME/.password-store"
-
-echo $OPTS
+[[ ! $OPTS_NOHOST == "true" ]] && OPTS+=" --network=host"
 
 ## Check if the xdocker RC file exists, and add custom options if it does
 if [[ -f $XDG_CONFIG_HOME/xdocker/xdocker.rc ]]; then
@@ -46,4 +45,5 @@ if [[ -f $XDG_CONFIG_HOME/xdocker/xdocker.rc ]]; then
 fi
 
 ## Run docker
+xhost +local:docker
 docker run $OPTS $DOCKER_ARGS $DOCKER_IMAGE $APP_CMD
