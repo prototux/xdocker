@@ -6,7 +6,7 @@ ARG PULSE_PKG="pulseaudio"
 ARG UTIL_PKG="sudo gnupg wget curl noto-fonts"
 
 # Define user
-ENV USER="prototux"
+ARG USER="prototux"
 
 # Install base packages
 RUN pacman -Syu --noconfirm && pacman -S --noconfirm $X11_PKG $PULSE_PKG $UTIL_PKG
