@@ -45,5 +45,5 @@ if [[ -f $XDG_CONFIG_HOME/xdocker/xdocker.rc ]]; then
 fi
 
 ## Run docker
-xhost +local:docker
+[[ $OPTS_XORG == "true" ]] && xhost +local:docker >>/dev/null
 docker run $OPTS $DOCKER_ARGS $DOCKER_IMAGE $APP_CMD
