@@ -26,6 +26,8 @@ fi
 ## Optionnal flags
 [[ $OPTS_XORG == "true" ]] && OPTS+=" -v /tmp/.X11-unix:/tmp/.X11-unix -v $HOME/.Xauthority:$HOME/.Xauthority -e DISPLAY=$DISPLAY"
 [[ $OPTS_PULSE == "true" ]] && OPTS+=" -v $XDG_RUNTIME_DIR/pulse:/tmp/pulse"
+[[ $OPTS_PIPEWIRE == "true" ]] && OPTS+=" -v $XDG_RUNTIME_DIR/pipewire-0:$XDG_RUNTIME_DIR/pipewire-0 -v $XDG_RUNTIME_DIR/pipewire-0.lock:$XDG_RUNTIME_DIR/pipewire-0.lock"
+[[ $OPTS_DBUS == "true" ]] && OPTS+=" -e DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus -v $XDG_RUNTIME_DIR/bus:$XDG_RUNTIME_DIR/bus:ro -v /etc/machine-id:/etc/machine-id:ro -v /var/lib/dbus/machine-id:/var/lib/dbus/machine-id:ro -v /run/dbus:/run/dbus:ro"
 [[ $OPTS_DL == "true" ]] && OPTS+=" -v $HOME/Downloads:$HOME/Downloads"
 [[ $OPTS_CONFIG == "true" ]] && OPTS+=" -v $XDG_CONFIG_HOME:$XDG_CONFIG_HOME"
 [[ $OPTS_DATA == "true" ]] && OPTS+=" -v $XDG_DATA_HOME:$XDG_DATA_HOME"
