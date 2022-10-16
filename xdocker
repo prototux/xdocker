@@ -1,51 +1,187 @@
 #!/usr/bin/env bash
 
-## Parameters
-if [[ -n "$1" ]]; then
-	APP="$1"
-	DOCKER_IMAGE="xdocker-$1"
-	TTYARG="-t"
-	shift
+## Usage: xdocker [--build-base] [--build-app=name] [--profile=(profile)] [--install=name] [-d][--debug] (app name)
+##            app name: the containrized app to launch
+##            --build-base -b: Build base
+##            --build-app -a --build-app=name -a=name: build app $name (or from PWD if ommited)
+##            --profile=profile: run with custom profile
+##            --install=name: install app $name desktop shortcut and default xdocker config (or from PWD if ommited)
+##            --debug: spawn a interactive bash shell inside the app container
+##            --help: print help/usage
+## Env vars: XDOCKER_BASE: xdocker git repo
+##           XDOCKER_APPS: xdocker-apps git repo
+## Files: $XDG_CONFIG_HOME/xdocker/xdocker.rc: custom OPT=" (docker params)" options
+##        $XDG_CONFIG_HOME/xdocker/apps/(appname).[(profile)]: xdocker config file for app (with optional profile)
+## EOU
+
+# Print help/usage from the comments
+usage() {
+	cat "$BASH_SOURCE" | sed -n '/^#!/,/^## EOU/p' | sed '/#!/d;/^$/d;/## EOU/d;s/## //'
+}
+
+# Build xbase image (base docker image on which the apps containers are built upon)
+build_base() {
+	if [[ -z "$XDOCKER_BASE" ]]; then
+		echo "XDOCKER_BASE not defined"
+		exit 1
+	fi
+
+	# Get base image (by default archlinux:base)
+	BASEIMG=$(cat "$XDOCKER_BASE/Dockerfile.xbase" | grep FROM | cut -d' ' -f2)
+
+	docker pull "$BASEIMG"
+	docker build --no-cache -t xbase --build-arg user=$USER --network host -f "$XDOCKER_BASE/Dockerfile.xbase" $XDOCKER_BASE
+}
+
+# Build app container
+build_app() {
+	if [[ -z "$XDOCKER_APPS" ]]; then
+		echo "XDOCKER_APPS not defined"
+		exit 1
+	fi
+
+	## Get app name
+	APPNAME="$1"
+	[[ -z "$APPNAME" ]] && APPNAME=$(basename $PWD)
+
+	docker build --no-cache -t "xdocker-${APPNAME}" ${XDOCKER_APPS}/${APPNAME}
+}
+
+# Install app desktop shortcut and default config
+install_app() {
+	if [[ -z "$XDOCKER_APPS" ]]; then
+		echo "XDOCKER_APPS not defined"
+		exit 1
+	fi
+
+	## Get app name
+	APPNAME="$1"
+	[[ -z "$APPNAME" ]] && APPNAME=$(basename $PWD)
+
+	echo "Installing ${APPNAME} files"
+	cp "${XDOCKER_APPS}/${APPNAME}/${APPNAME}.desktop" "$XDG_DATA_HOME/applications/${APPNAME}.desktop"
+	cp "${XDOCKER_APPS}/${APPNAME}/xdocker" "$XDG_CONFIG_HOME/xdocker/apps/${APPNAME}"
+}
+
+# Generate docker params
+mkparams() {
+	OPTS=""
+
+	## System dirs
+	[[ !$OPTS_NORUNDIR == "true" ]] && OPTS+=" -e XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+	[[ $OPTS_MOUNTS == "true" ]] && OPTS+=" -v /mnt:/mnt -v /media:/media"
+
+	## Display servers
+	[[ $OPTS_XORG == "true" ]] && OPTS+=" -v /tmp/.X11-unix:/tmp/.X11-unix -v $HOME/.Xauthority:$HOME/.Xauthority -e DISPLAY=$DISPLAY"
+
+	## Audio servers
+	[[ $OPTS_PULSE == "true" ]] && OPTS+=" -v $XDG_RUNTIME_DIR/pulse:/tmp/pulse"
+	[[ $OPTS_PIPEWIRE == "true" ]] && OPTS+=" -v $XDG_RUNTIME_DIR/pipewire-0:$XDG_RUNTIME_DIR/pipewire-0 -v $XDG_RUNTIME_DIR/pipewire-0.lock:$XDG_RUNTIME_DIR/pipewire-0.lock"
+
+	## DBus
+	[[ $OPTS_DBUS == "true" ]] && OPTS+=" -e DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus -v $XDG_RUNTIME_DIR/bus:$XDG_RUNTIME_DIR/bus:ro -v /etc/machine-id:/etc/machine-id:ro -v /var/lib/dbus/machine-id:/var/lib/dbus/machine-id:ro -v /run/dbus:/run/dbus:ro"
+
+	## Personal dirs
+	[[ $OPTS_DOCS == "true" ]] && OPTS+=" -v $HOME/Documents:$HOME/Documents"
+	[[ $OPTS_DL == "true" ]] && OPTS+=" -v $HOME/Downloads:$HOME/Downloads"
+
+	## XDG dirs
+	[[ $OPTS_CONFIG == "true" ]] && OPTS+=" -v $XDG_CONFIG_HOME:$XDG_CONFIG_HOME -e XDG_CONFIG_HOME=$XDG_CONFIG_HOME"
+	[[ $OPTS_DATA == "true" ]] && OPTS+=" -v $XDG_DATA_HOME:$XDG_DATA_HOME -e XDG_DATA_HOME=$XDG_DATA_HOME"
+	[[ $OPTS_STATE == "true" ]] && OPTS+=" -v $XDG_STATE_HOME:$XDG_STATE_HOME -e XDG_STATE_HOME=$XDG_STATE_HOME"
+
+	## GPG/pass params
+	[[ $OPTS_GPG == "true" ]] && OPTS+=" -v $GPGAGENT:$HOME/.gnupg/S.gpg-agent -v $HOME/.gnupg:$HOME/.gnupg"
+	[[ $OPTS_PASS == "true" ]] && OPTS+=" -v $HOME/.password-store:$HOME/.password-store"
+
+	## Misc params
+	[[ ! $OPTS_NOHOST == "true" ]] && OPTS+=" --network=host"
+
+
+	## Check if the xdocker RC file exists, and add custom options if it does
+	if [[ -f $XDG_CONFIG_HOME/xdocker/xdocker.rc ]]; then
+		while read custopt; do
+			VAR=$(echo "$custopt" | cut -d'=' -f1)
+			OPT=$(echo "$custopt" | cut -d'=' -f2-)
+			[[ "${!VAR}" == "true" ]] && OPTS+=" $(eval echo $OPT)"
+		done< <(cat $XDG_CONFIG_HOME/xdocker/xdocker.rc)
+	fi
+
+	echo $OPTS
+}
+
+# Run containerized app
+run_app() {
+	APPNAME="$1"; shift
+	APPOPTS="$@"
+
+	## Docker image name
+	DOCKER_IMAGE="xdocker-${APPNAME}"
+	[[ "$APPNAME" == "xbase" ]] && DOCKER_IMAGE="xbase"
+
+	## Base params
+	BASEOPTS="--rm -t"
+	[[ "$DEBUG" == "true" || "$APPNAME" == "xbase" ]] && BASEOPTS+=" -i"
+	[[ "$DEBUG" == "true" ]] && BASEOPTS+=" --entrypoint /bin/bash"
+	GPGAGENT=$(gpgconf --list-dirs | grep agent-socket | cut -d':' -f2)
+
+	## Check if the app config file exists, and load it if it does
+	CONFIG_FILE="${XDG_CONFIG_HOME}/xdocker/apps/${APPNAME}"
+	[[ -n "$PROFILE" ]] && CONFIG_FILE="${XDG_CONFIG_HOME}/xdocker/apps/${APPNAME}.${PROFILE}"
+	if [[ -f "$CONFIG_FILE" ]]; then
+		source $CONFIG_FILE
+	elif [[ "$APPNAME" != "xbase" ]]; then
+		echo "WARN: no config file for $APP"
+	fi
+
+	# Get options
+	OPTS=$(mkparams)
+
+	## Run docker
+	[[ $OPTS_XORG == "true" ]] && xhost +local:docker >>/dev/null
+	docker run $BASE_OPTS $DOCKER_ARGS $OPTS $DOCKER_IMAGE $APP_CMD
+}
+
+
+if [[ $# -eq 0 ]]; then
+	# Run base image
+	run_app "xbase"
 else
-	APP="xbase"
-	DOCKER_IMAGE="xbase"
-	TTYARG="-it"
+	# Build and/or run app
+	for i in "$@"; do
+		case $i in
+			-h|--help)
+				usage
+				exit 0
+				;;
+			-b|--build-base)
+				build_base
+				shift
+				;;
+			-a=*|--build-app*)
+				build_app "${i#*=}"
+				shift
+				;;
+			-p=*|--profile=*)
+				PROFILE="${i#*=}"
+				shift
+				;;
+			-i*|--install*)
+				install_app "${i#*=}"
+				shift
+				;;
+			-d|--debug)
+				DEBUG="true"
+				shift
+				;;
+			-*|--*)
+				echo "Unknown option $i"
+				exit 1
+				;;
+			*)
+				run_app $@
+				exit 0
+				;;
+		esac
+	done
 fi
-
-## Base vars
-OPTS="--rm $TTYARG"
-GPGAGENT=$(gpgconf --list-dirs | grep agent-socket | cut -d':' -f2)
-
-## Check if the app config file exists, and load it if it does
-if [[ -f $XDG_CONFIG_HOME/xdocker/$APP ]]; then
-	source $XDG_CONFIG_HOME/xdocker/$APP
-elif [[ "$APP" != "xbase" ]]; then
-	echo "WARN: no config file for $APP"
-fi
-
-## Optionnal flags
-[[ $OPTS_XORG == "true" ]] && OPTS+=" -v /tmp/.X11-unix:/tmp/.X11-unix -v $HOME/.Xauthority:$HOME/.Xauthority -e DISPLAY=$DISPLAY"
-[[ $OPTS_PULSE == "true" ]] && OPTS+=" -v $XDG_RUNTIME_DIR/pulse:/tmp/pulse"
-[[ $OPTS_PIPEWIRE == "true" ]] && OPTS+=" -v $XDG_RUNTIME_DIR/pipewire-0:$XDG_RUNTIME_DIR/pipewire-0 -v $XDG_RUNTIME_DIR/pipewire-0.lock:$XDG_RUNTIME_DIR/pipewire-0.lock"
-[[ $OPTS_DBUS == "true" ]] && OPTS+=" -e DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus -v $XDG_RUNTIME_DIR/bus:$XDG_RUNTIME_DIR/bus:ro -v /etc/machine-id:/etc/machine-id:ro -v /var/lib/dbus/machine-id:/var/lib/dbus/machine-id:ro -v /run/dbus:/run/dbus:ro"
-[[ $OPTS_DL == "true" ]] && OPTS+=" -v $HOME/Downloads:$HOME/Downloads"
-[[ $OPTS_CONFIG == "true" ]] && OPTS+=" -v $XDG_CONFIG_HOME:$XDG_CONFIG_HOME"
-[[ $OPTS_DATA == "true" ]] && OPTS+=" -v $XDG_DATA_HOME:$XDG_DATA_HOME"
-[[ $OPTS_DOCS == "true" ]] && OPTS+=" -v $HOME/Documents:$HOME/Documents"
-[[ $OPTS_MOUNTS == "true" ]] && OPTS+=" -v /mnt:/mnt -v /media:/media"
-[[ $OPTS_GPG == "true" ]] && OPTS+=" -v $GPGAGENT:$HOME/.gnupg/S.gpg-agent -v $HOME/.gnupg:$HOME/.gnupg"
-[[ $OPTS_PASS == "true" ]] && OPTS+=" -v $HOME/.password-store:$HOME/.password-store"
-[[ ! $OPTS_NOHOST == "true" ]] && OPTS+=" --network=host"
-
-## Check if the xdocker RC file exists, and add custom options if it does
-if [[ -f $XDG_CONFIG_HOME/xdocker/xdocker.rc ]]; then
-	while read custopt; do
-		VAR=$(echo "$custopt" | cut -d'=' -f1)
-		OPT=$(echo "$custopt" | cut -d'=' -f2-)
-		[[ "${!VAR}" == "true" ]] && OPTS+=" $(eval echo $OPT)"
-	done< <(cat $XDG_CONFIG_HOME/xdocker/xdocker.rc)
-fi
-
-## Run docker
-[[ $OPTS_XORG == "true" ]] && xhost +local:docker >>/dev/null
-docker run $OPTS $DOCKER_ARGS $DOCKER_IMAGE $APP_CMD

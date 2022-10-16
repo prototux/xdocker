@@ -1,4 +1,4 @@
-FROM archlinux:latest
+FROM archlinux:base
 
 # Define base packages
 ARG X11_PKG="libx11 libxcb libxext libxmu libxrender libxkbcommon-x11 libxinerama libxt mesa fontconfig"
@@ -12,7 +12,7 @@ ARG user="prototux"
 RUN pacman -Syu --noconfirm && pacman -S --noconfirm $X11_PKG $PULSE_PKG $UTIL_PKG
 
 # Create user and add to correct groups
-RUN groupadd -g 1000 $user && useradd -u 1000 -g 1000 -G video,lp,audio,wheel -m $user
+RUN groupadd -g 1000 $user && useradd -u 1000 -g 1000 -G video,lp,audio,wheel,input,kmem -m $user
 RUN echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/wheel
 
 # Add pulse-client to avoid creating the pulseaudio server
