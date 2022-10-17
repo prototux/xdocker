@@ -68,7 +68,7 @@ mkparams() {
 	OPTS=""
 
 	## System dirs
-	[[ !$OPTS_NORUNDIR == "true" ]] && OPTS+=" -e XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+	[[ ! $OPTS_NORUNDIR == "true" ]] && OPTS+=" -e XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
 	[[ $OPTS_MOUNTS == "true" ]] && OPTS+=" -v /mnt:/mnt -v /media:/media"
 
 	## Display servers
