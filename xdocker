@@ -107,7 +107,7 @@ mkparams() {
 		done< <(cat $XDG_CONFIG_HOME/xdocker/xdocker.rc)
 	fi
 
-	echo $OPTS
+	echo "$OPTS"
 }
 
 # Run containerized app
@@ -115,9 +115,17 @@ run_app() {
 	APPNAME="$1"; shift
 	APPOPTS="$@"
 
+	echo "Running containerized app $APPNAME"
+
 	## Docker image name
 	DOCKER_IMAGE="xdocker-${APPNAME}"
 	[[ "$APPNAME" == "xbase" ]] && DOCKER_IMAGE="xbase"
+
+	## Check docker image
+	if [[ $(docker image ls | grep -c "$DOCKER_IMAGE") -eq 0 ]]; then
+		echo "ERROR: no docker image for app $APPNAME"
+		exit 0
+	fi
 
 	## Base params
 	BASEOPTS="--rm -t"
@@ -136,6 +144,8 @@ run_app() {
 
 	# Get options
 	OPTS=$(mkparams)
+
+	echo "$OPTS"
 
 	## Run docker
 	[[ $OPTS_XORG == "true" ]] && xhost +local:docker >>/dev/null
