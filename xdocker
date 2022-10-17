@@ -145,8 +145,6 @@ run_app() {
 	# Get options
 	OPTS=$(mkparams)
 
-	echo "$OPTS"
-
 	## Run docker
 	[[ $OPTS_XORG == "true" ]] && xhost +local:docker >>/dev/null
 	docker run $BASE_OPTS $DOCKER_ARGS $OPTS $DOCKER_IMAGE $APP_CMD
