@@ -34,13 +34,21 @@ build_base() {
 		exit 1
 	fi
 
-	# Build xdev or xbase image
-	if [[ -n "$IS_ENV" || "$1" == "true" ]]; then
-		docker build --no-cache -t xdev --network host -f "$XDOCKER_BASE/Dockerfile.xdev" $XDOCKER_BASE
-	else
+	# Build xbase or xdev image
+	if [[ "$IS_ENV" != "true" || "$1" == "false" ]]; then
 		# Build xbase image
 		docker pull "$BASEIMG"
 		docker build --no-cache -t xbase --build-arg user=$USER --network host -f "$XDOCKER_BASE/Dockerfile.xbase" $XDOCKER_BASE
+	elif [[ "$IS_ENV" == "true" || "$1" == "true" ]]; then
+		# Build xbase if it doesn't exist yet
+		if [[ $(docker image ls | grep -c "xbase") -eq 0 ]]; then
+			echo "xbase not found, building first"
+			build_base false
+		fi
+		docker build --no-cache -t xdev --network host -f "$XDOCKER_BASE/Dockerfile.xdev" $XDOCKER_BASE
+	else
+		echo "Impossible case: not building xbase nor xdev"
+		exit 1
 	fi
 }
 
