@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 
-## Usage: xdocker [--build-base] [--build-app=name] [--profile=(profile)] [--install=name] [-d][--debug] (app name)
-##            app name: the containrized app to launch
-##            --build-base -b: Build base
-##            --build-app -a --build-app=name -a=name: build app $name (or from PWD if ommited)
+## Usage: xdocker [-x][--build-base] [-b][--build] [--profile=(profile)] [-i][--install] [-d][--debug] [-e][--env] (app/env)
+##            app/env: the containerized app/env to launch
+##            --env -e: Run/Build dev env
+##            --build-base -x: Build base (+ xdev base if --env/-e is set)
+##            --build -b: build app or env $name (or from PWD if ommited)
+##                        or "all" to build all (base + apps + envs)
 ##            --profile=profile: run with custom profile
-##            --install=name: install app $name desktop shortcut and default xdocker config (or from PWD if ommited)
+##            --install -i: install app $name desktop shortcut and default xdocker config (or from PWD if ommited)
 ##            --debug: spawn a interactive bash shell inside the app container
 ##            --help: print help/usage
 ## Env vars: XDOCKER_BASE: xdocker git repo
 ##           XDOCKER_APPS: xdocker-apps git repo
+##           XDOCKER_ENVS: xdocker-envs git repo
 ## Files: $XDG_CONFIG_HOME/xdocker/xdocker.rc: custom OPT=" (docker params)" options
 ##        $XDG_CONFIG_HOME/xdocker/apps/(appname).[(profile)]: xdocker config file for app (with optional profile)
+##        $XDG_CONFIG_HOME/xdocker/allapps: List of all apps to build
+##        $XDG_CONFIG_HOME/xdocker/allenvs: List of all envs to build
 ## EOU
 
 # Print help/usage from the comments
@@ -19,41 +24,68 @@ usage() {
 	cat "$BASH_SOURCE" | sed -n '/^#!/,/^## EOU/p' | sed '/#!/d;/^$/d;/## EOU/d;s/## //'
 }
 
-# Build xbase image (base docker image on which the apps containers are built upon)
+# Build xbase/xdev image (base docker image on which the apps containers are built upon)
 build_base() {
-	if [[ -z "$XDOCKER_BASE" ]]; then
-		echo "XDOCKER_BASE not defined"
-		exit 1
-	fi
-
 	# Get base image (by default archlinux:base)
 	BASEIMG=$(cat "$XDOCKER_BASE/Dockerfile.xbase" | grep FROM | cut -d' ' -f2)
 
-	docker pull "$BASEIMG"
-	docker build --no-cache -t xbase --build-arg user=$USER --network host -f "$XDOCKER_BASE/Dockerfile.xbase" $XDOCKER_BASE
-}
-
-# Build app container
-build_app() {
-	if [[ -z "$XDOCKER_APPS" ]]; then
-		echo "XDOCKER_APPS not defined"
+	if [[ -z "BASEIMG" ]]; then
+		echo "Cannot find base image FROM"
 		exit 1
 	fi
 
-	## Get app name
-	APPNAME="$1"
-	[[ -z "$APPNAME" ]] && APPNAME=$(basename $PWD)
+	# Build xdev or xbase image
+	if [[ -n "$IS_ENV" || "$1" == "true" ]]; then
+		docker build --no-cache -t xdev --network host -f "$XDOCKER_BASE/Dockerfile.xdev" $XDOCKER_BASE
+	else
+		# Build xbase image
+		docker pull "$BASEIMG"
+		docker build --no-cache -t xbase --build-arg user=$USER --network host -f "$XDOCKER_BASE/Dockerfile.xbase" $XDOCKER_BASE
+	fi
+}
 
-	docker build --no-cache -t "xdocker-${APPNAME}" ${XDOCKER_APPS}/${APPNAME}
+# Build app/env container
+build_single() {
+	# Get app/env name
+	NAME="$1"
+	[[ -z "$NAME" ]] && NAME=$(basename $PWD)
+	[[ "$IS_ENV" == true ]] && PREFIX="xdev" || PREFIX="xdocker"
+	[[ "$IS_ENV" == true ]] && XDIR="$XDOCKER_ENVS" || XDIR="$XDOCKER_APPS"
+
+	if [[ -z "$XDIR" ]]; then
+		echo "Base dir for ${PREFIX} not found"
+		exit 1
+	fi
+
+	docker build --no-cache --network host -t "${PREFIX}-${NAME}" ${XDIR}/${NAME}
+}
+
+# Build all apps
+build_all() {
+	if [[ ! -f ${XDG_CONFIG_HOME}/xdocker/${ALL_FILE} ]]; then
+		echo "${ALL_FILE} file not found"
+		exit 1
+	fi
+
+	build_base
+	build_base "true"
+	while read name; do
+		build_single $name
+	done< <(cat ${XDG_CONFIG_HOME}/xdocker/${ALL_FILE})
+}
+
+# Build app main
+build() {
+	if [[ "$1" == "all" ]]; then
+		[[ "$IS_ENV" == "true" ]] && ALL_FILE="allenvs" || ALL_FILE="allapps"
+		build_all
+	else
+		build_single $1
+	fi
 }
 
 # Install app desktop shortcut and default config
-install_app() {
-	if [[ -z "$XDOCKER_APPS" ]]; then
-		echo "XDOCKER_APPS not defined"
-		exit 1
-	fi
-
+install() {
 	## Get app name
 	APPNAME="$1"
 	[[ -z "$APPNAME" ]] && APPNAME=$(basename $PWD)
@@ -70,9 +102,11 @@ mkparams() {
 	## System dirs
 	[[ ! $OPTS_NORUNDIR == "true" ]] && OPTS+=" -e XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
 	[[ $OPTS_MOUNTS == "true" ]] && OPTS+=" -v /mnt:/mnt -v /media:/media"
+	[[ $OPTS_UDEV == "true" ]] && OPTS+=" -v /run/udev/data:/run/udev/data"
 
 	## Display servers
 	[[ $OPTS_XORG == "true" ]] && OPTS+=" -v /tmp/.X11-unix:/tmp/.X11-unix -v $HOME/.Xauthority:$HOME/.Xauthority -e DISPLAY=$DISPLAY"
+	[[ $OPTS_DRI == "true" ]] && OPTS+=" --device /dev/dri"
 
 	## Audio servers
 	[[ $OPTS_PULSE == "true" ]] && OPTS+=" -v $XDG_RUNTIME_DIR/pulse:/tmp/pulse"
@@ -90,13 +124,13 @@ mkparams() {
 	[[ $OPTS_DATA == "true" ]] && OPTS+=" -v $XDG_DATA_HOME:$XDG_DATA_HOME -e XDG_DATA_HOME=$XDG_DATA_HOME"
 	[[ $OPTS_STATE == "true" ]] && OPTS+=" -v $XDG_STATE_HOME:$XDG_STATE_HOME -e XDG_STATE_HOME=$XDG_STATE_HOME"
 
-	## GPG/pass params
-	[[ $OPTS_GPG == "true" ]] && OPTS+=" -v $GPGAGENT:$HOME/.gnupg/S.gpg-agent -v $HOME/.gnupg:$HOME/.gnupg"
+	## GPG/pass, ssh params
+	[[ $OPTS_GPG == "true" ]] && OPTS+=" -v $(gpgconf --list-dirs | grep agent-socket | cut -d':' -f2):$HOME/.gnupg/S.gpg-agent -v $HOME/.gnupg:$HOME/.gnupg"
 	[[ $OPTS_PASS == "true" ]] && OPTS+=" -v $HOME/.password-store:$HOME/.password-store"
+	[[ $OPTS_SSH == "true" ]] && OPTS+=" -v $XDG_RUNTIME_DIR/gnupg/S.gpg-agent.ssh:$XDG_RUNTIME_DIR/gnupg/S.gpg-agent.ssh -e SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/gnupg/S.gpg-agent.ssh"
 
 	## Misc params
 	[[ ! $OPTS_NOHOST == "true" ]] && OPTS+=" --network=host"
-
 
 	## Check if the xdocker RC file exists, and add custom options if it does
 	if [[ -f $XDG_CONFIG_HOME/xdocker/xdocker.rc ]]; then
@@ -110,36 +144,46 @@ mkparams() {
 	echo "$OPTS"
 }
 
-# Run containerized app
-run_app() {
-	APPNAME="$1"; shift
-	APPOPTS="$@"
-
-	echo "Running containerized app $APPNAME"
+# Run containerized app/env
+run() {
+	NAME="$1"; shift
+    RUNOPTS="$@"
 
 	## Docker image name
-	DOCKER_IMAGE="xdocker-${APPNAME}"
-	[[ "$APPNAME" == "xbase" ]] && DOCKER_IMAGE="xbase"
+	[[ "$IS_ENV" == "true" ]] && DOCKER_IMAGE="xdev-${NAME}" || DOCKER_IMAGE="xdocker-${NAME}"
+	[[ "$NAME" == "xbase" ]] && DOCKER_IMAGE="xbase"
+	[[ "$NAME" == "xdev" ]] && DOCKER_IMAGE="xdev"
 
 	## Check docker image
 	if [[ $(docker image ls | grep -c "$DOCKER_IMAGE") -eq 0 ]]; then
-		echo "ERROR: no docker image for app $APPNAME"
+		echo "ERROR: no docker image ${DOCKER_IMAGE} found"
 		exit 0
 	fi
 
 	## Base params
 	BASEOPTS="--rm -t"
-	[[ "$DEBUG" == "true" || "$APPNAME" == "xbase" ]] && BASEOPTS+=" -i"
+	[[ "$DEBUG" == "true" || "$NAME" == "xbase" || "$IS_ENV" == "true" ]] && BASEOPTS+=" -i"
 	[[ "$DEBUG" == "true" ]] && BASEOPTS+=" --entrypoint /bin/bash"
-	GPGAGENT=$(gpgconf --list-dirs | grep agent-socket | cut -d':' -f2)
+
+	## App/Env params
+	if [[ "$IS_ENV" ]]; then # Env-specific params
+		CONFIG_DIR="envs"
+		OPTS_XORG="true"
+		OPTS_PULSE="true"
+		# --privileged --device /dev/bus
+		DOCKER_ARGS="-v $HOME:$HOME -w $PWD -e XDEV=$NAME"
+	else # App-specific params
+		echo "Running containerized app $NAME"
+		CONFIG_DIR="apps"
+	fi
 
 	## Check if the app config file exists, and load it if it does
-	CONFIG_FILE="${XDG_CONFIG_HOME}/xdocker/apps/${APPNAME}"
-	[[ -n "$PROFILE" ]] && CONFIG_FILE="${XDG_CONFIG_HOME}/xdocker/apps/${APPNAME}.${PROFILE}"
+	CONFIG_FILE="${XDG_CONFIG_HOME}/xdocker/${CONFIG_DIR}/${NAME}"
+	[[ -n "$PROFILE" ]] && CONFIG_FILE="${XDG_CONFIG_HOME}/xdocker/${CONFIG_DIR}/${NAME}.${PROFILE}"
 	if [[ -f "$CONFIG_FILE" ]]; then
 		source $CONFIG_FILE
-	elif [[ "$APPNAME" != "xbase" ]]; then
-		echo "WARN: no config file for $APP"
+	elif [[ "$NAME" != "xbase" && "$IS_ENV" != "true" ]]; then
+		echo "WARN: no config file for ${NAME}"
 	fi
 
 	# Get options
@@ -147,49 +191,86 @@ run_app() {
 
 	## Run docker
 	[[ $OPTS_XORG == "true" ]] && xhost +local:docker >>/dev/null
-	docker run $BASE_OPTS $DOCKER_ARGS $OPTS $DOCKER_IMAGE $APP_CMD
+	docker run $BASEOPTS $DOCKER_ARGS $OPTS $DOCKER_IMAGE $APP_CMD
 }
 
+# Main run
+main() {
+	if [[ "$IS_BUILD_BASE" == "true" ]]; then
+		build_base $@
+	elif [[ $# -eq 0 ]]; then # If no name is provided, run base image
+		echo "No app/env, running default xbase/xdev"
+		[[ "$IS_ENV" ]] && NAME="xdev" || NAME="xbase"
+		run $NAME
+	else
+		# Manage impossible cases
+		## Cannot install an env
+		if [[ "$IS_INSTALL" == "true" && "$IS_ENV" == "true" ]]; then
+			echo "Cannot install an env"
+			exit 1
+		fi
 
-if [[ $# -eq 0 ]]; then
-	# Run base image
-	run_app "xbase"
-else
-	# Build and/or run app
-	for i in "$@"; do
-		case $i in
-			-h|--help)
-				usage
-				exit 0
-				;;
-			-b|--build-base)
-				build_base
-				shift
-				;;
-			-a=*|--build-app*)
-				build_app "${i#*=}"
-				shift
-				;;
-			-p=*|--profile=*)
-				PROFILE="${i#*=}"
-				shift
-				;;
-			-i*|--install*)
-				install_app "${i#*=}"
-				shift
-				;;
-			-d|--debug)
-				DEBUG="true"
-				shift
-				;;
-			-*|--*)
-				echo "Unknown option $i"
-				exit 1
-				;;
-			*)
-				run_app $@
-				exit 0
-				;;
-		esac
-	done
+		# Build/Install/Run app/env
+		if [[ "$IS_BUILD" == "true" ]]; then
+			build $1
+		elif [[ "$IS_INSTALL" == "true" ]]; then
+			install $1
+		else
+			run $@
+		fi
+	fi
+}
+
+#############
+# Main code #
+#############
+
+# Run safety checks
+if [[ -z "$XDOCKER_APPS" ]]; then
+	echo "XDOCKER_APPS not defined"
+	exit 1
 fi
+if [[ -z "$XDOCKER_BASE" ]]; then
+	echo "XDOCKER_BASE not defined"
+	exit 1
+fi
+
+# Build and/or run app
+for i in "$@"; do
+	case $i in
+		-h|--help)
+			usage
+			exit 0
+			;;
+		-e|--env)
+			IS_ENV="true"
+			shift
+			;;
+		-x|--build-base)
+			IS_BUILD_BASE="true"
+			shift
+			;;
+		-b|--build)
+			IS_BUILD="true"
+			shift
+			;;
+		-p=*|--profile=*)
+			PROFILE="${i#*=}"
+			shift
+			;;
+		-i|--install)
+			IS_INSTALL="true"
+			shift
+			;;
+		-d|--debug)
+			DEBUG="true"
+			shift
+			;;
+		-*|--*)
+			echo "Unknown option $i"
+			exit 1
+			;;
+	esac
+done
+
+main $@

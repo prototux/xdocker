@@ -1,0 +1,6 @@
+FROM xbase
+
+# Install dev packages, customize as you want
+RUN sudo pacman -S --noconfirm base-devel vim git curl zsh zsh-autosuggestions zsh-syntax-highlighting
+
+CMD ["/bin/zsh"]
