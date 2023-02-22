@@ -43,7 +43,7 @@ build_base() {
 		# Build xbase if it doesn't exist yet
 		if [[ $(docker image ls | grep -c "xbase") -eq 0 ]]; then
 			echo "xbase not found, building first"
-			build_base false
+			build_base "false"
 		fi
 		docker build --no-cache -t xdev --network host -f "$XDOCKER_BASE/Dockerfile.xdev" $XDOCKER_BASE
 	else
@@ -78,6 +78,7 @@ build_all() {
 	build_base
 	build_base "true"
 	while read name; do
+		echo "doing $name"
 		build_single $name
 	done< <(cat ${XDG_CONFIG_HOME}/xdocker/${ALL_FILE})
 }
@@ -86,6 +87,7 @@ build_all() {
 build() {
 	if [[ "$1" == "all" ]]; then
 		[[ "$IS_ENV" == "true" ]] && ALL_FILE="allenvs" || ALL_FILE="allapps"
+		echo "build all"
 		build_all
 	else
 		build_single $1
@@ -114,6 +116,7 @@ mkparams() {
 
 	## Display servers
 	[[ $OPTS_XORG == "true" ]] && OPTS+=" -v /tmp/.X11-unix:/tmp/.X11-unix -v $HOME/.Xauthority:$HOME/.Xauthority -e DISPLAY=$DISPLAY"
+	[[ ! $OPTS_XORG_NOCURSOR == "true" ]] && OPTS+=" -v $XDG_DATA_HOME/icons:$XDG_DATA_HOME/icons -e XCURSOR_PATH=$XCURSOR_PATH -e XCURSOR_THEME=$XCURSOR_THEME"
 	[[ $OPTS_DRI == "true" ]] && OPTS+=" --device /dev/dri"
 
 	## Audio servers
@@ -177,11 +180,13 @@ run() {
 	if [[ "$IS_ENV" ]]; then # Env-specific params
 		CONFIG_DIR="envs"
 		OPTS_XORG="true"
+		OPTS_DRI="true"
 		OPTS_PULSE="true"
 		# --privileged --device /dev/bus
-		DOCKER_ARGS="-v $HOME:$HOME -w $PWD -e XDEV=$NAME"
+		BASEOPTS+=" -v $HOME:$HOME -w $PWD -e XDEV=$NAME"
 	else # App-specific params
-		echo "Running containerized app $NAME"
+		[[ "$NAME" != "xbase" ]] && echo "Running containerized app $NAME"
+		[[ -n "$PROFILE" ]] && echo "  => with profile $PROFILE"
 		CONFIG_DIR="apps"
 	fi
 
@@ -199,6 +204,7 @@ run() {
 
 	## Run docker
 	[[ $OPTS_XORG == "true" ]] && xhost +local:docker >>/dev/null
+	[[ "$DEBUG" == "true" ]] && APP_CMD=""
 	docker run $BASEOPTS $DOCKER_ARGS $OPTS $DOCKER_IMAGE $APP_CMD
 }
 

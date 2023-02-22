@@ -13,6 +13,18 @@ Initially there was 2 systems, one for desktop applications, and one for dev env
 * This is based on archlinux images, and some options assume archlinux paths
 * As usual, contributions are welcome :)
 
+## TODO
+
+* Supporting xdg-desktop-portal, and other inter-apps links
+* Check what AppImage, Flatpak and Snap does and/or uses (as interfaces to the system), to have better compatibility
+* * Maybe find a way to easily run these inside the containers, or as an alternatives to the containers?
+* Add mode OPTS for better integration with the system:
+* * Icons and cursors
+* * Fonts (and font configs)
+* * GTK and Qt themes/configs
+* * Printing interfaces
+* Have better support for some cli commands and daemons (aerc, ssh, CUPS, sane-based things...)
+
 ## Howto (desktop apps)
 
 * Build the xbase image: `xdocker -x`
